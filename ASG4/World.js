@@ -957,6 +957,19 @@ function renderAllShapes() {
   cube.matrix.scale(0.5, 0.5, 0.5);
   cube.render();
 
+  var sphere = new Sphere();
+  sphere.color = [0.8, 0, 0, 1];
+  if (g_normalOn) {
+    sphere.textureNum = -3; // No texture
+  }
+  else {
+    sphere.textureNum = -2; // No texture
+  }
+  sphere.matrix.translate(-2.0, 0.5, -3);
+  sphere.matrix.rotate(0, 1, 0, 0);
+  sphere.matrix.scale(0.5, 0.5, 0.5);
+  sphere.render();
+
   // room
   var room = new Cube();
   room.color = [0.5, 0.5, 0.5, 1];
