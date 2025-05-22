@@ -1,6 +1,6 @@
 /// ChatGPT/Claude helped me with this code
 class Camera {
-    constructor(canvas, fov = 60, near = 0.1, far = 1000) {
+    constructor(canvas, fov = 70, near = 0.1, far = 1000) {
         this.canvas = canvas;
         this.fov = fov;
         this.near = near;

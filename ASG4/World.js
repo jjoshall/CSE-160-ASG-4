@@ -4,7 +4,9 @@ var VSHADER_SOURCE = `
   precision mediump float;
   attribute vec4 a_Position;
   attribute vec2 a_UV;
+  attribute vec3 a_Normal;
   varying vec2 v_UV;
+  varying vec3 v_Normal;
   uniform mat4 u_ModelMatrix;
   uniform mat4 u_GlobalRotateMatrix;
   uniform mat4 u_ViewMatrix;
@@ -12,12 +14,14 @@ var VSHADER_SOURCE = `
   void main() {
     gl_Position = u_ProjectionMatrix * u_ViewMatrix * u_GlobalRotateMatrix * u_ModelMatrix * a_Position;
     v_UV = a_UV;
+    v_Normal = a_Normal;
   }`
 
 // Fragment shader program
 var FSHADER_SOURCE =`
   precision mediump float;
   varying vec2 v_UV;
+  varying vec3 v_Normal;
   uniform vec4 u_FragColor;
   uniform sampler2D u_Sampler0;
   uniform sampler2D u_Sampler1;
@@ -27,7 +31,10 @@ var FSHADER_SOURCE =`
   uniform sampler2D u_Sampler5;
   uniform int u_whichTexture;
   void main() {
-    if (u_whichTexture == -2) {
+    if (u_whichTexture == -3) {
+      gl_FragColor = vec4((v_Normal + 1.0) / 2.0, 1.0); // Use normal debug color
+    }
+    else if (u_whichTexture == -2) {
       gl_FragColor = u_FragColor; // Use color
     }
     else if (u_whichTexture == -1) {
@@ -61,6 +68,7 @@ let canvas;
 let gl;
 let a_Position;
 let a_UV;
+let a_Normal;
 let u_FragColor;
 let u_ModelMatrix;
 let u_ViewMatrix;
@@ -106,6 +114,13 @@ function connectVariablesToGLSL() {
   a_UV = gl.getAttribLocation(gl.program, 'a_UV');
   if (a_UV < 0) {
     console.log('Failed to get the storage location of a_UV');
+    return;
+  }
+
+  // Get the storage location of a_Normal
+  a_Normal = gl.getAttribLocation(gl.program, 'a_Normal');
+  if (a_Normal < 0) {
+    console.log('Failed to get the storage location of a_Normal');
     return;
   }
 
@@ -220,9 +235,12 @@ let g_rightFootAnimation = true;
 let g_camera;
 let g_activeKeys = new Set(); // Set to keep track of active keys
 let g_keyProcessed = new Set();
+let g_normalOn = false; // Flag to toggle normal mapping
 
 function addActionsForHtmlUI() {
-  // nothing to do here
+  // Add event listeners for HTML UI elements
+  document.getElementById('normalOn').onclick = function() {g_normalOn = true;};
+  document.getElementById('normalOff').onclick = function() {g_normalOn = false;};
 }
 
 function initTexture0() {
@@ -236,7 +254,7 @@ function initTexture0() {
   // Register the event handler to be called on loading an image
   image.onload = function() { sendImageToTEXTURE0(image); };
   // Specify the image to be loaded
-  image.src = 'ASG3/space.jpeg';
+  image.src = 'ASG4/space.jpeg';
 
   // Success and image loading
   return true;
@@ -253,7 +271,7 @@ function initTexture1() {
   // Register the event handler to be called on loading an image
   image.onload = function() { sendImageToTEXTURE1(image); };
   // Specify the image to be loaded
-  image.src = 'ASG3/lava.jpg';
+  image.src = 'ASG4/lava.jpg';
 
   // Success and image loading
   return true;
@@ -270,7 +288,7 @@ function initTexture2() {
   // Register the event handler to be called on loading an image
   image.onload = function() { sendImageToTEXTURE2(image); };
   // Specify the image to be loaded
-  image.src = 'ASG3/fire.jpg';
+  image.src = 'ASG4/mcdirt.jpg';
 
   // Success and image loading
   return true;
@@ -287,7 +305,7 @@ function initTexture3() {
   // Register the event handler to be called on loading an image
   image.onload = function() { sendImageToTEXTURE3(image); };
   // Specify the image to be loaded
-  image.src = 'ASG3/rock.jpg';
+  image.src = 'ASG4/rock.jpg';
 
   // Success and image loading
   return true;
@@ -304,7 +322,7 @@ function initTexture4() {
   // Register the event handler to be called on loading an image
   image.onload = function() { sendImageToTEXTURE4(image); };
   // Specify the image to be loaded
-  image.src = 'ASG3/flowers.jpg';
+  image.src = 'ASG4/flowers.jpg';
 
   // Success and image loading
   return true;
@@ -321,7 +339,7 @@ function initTexture5() {
   // Register the event handler to be called on loading an image
   image.onload = function() { sendImageToTEXTURE5(image); };
   // Specify the image to be loaded
-  image.src = 'ASG3/grass.jpg';
+  image.src = 'ASG4/grass.jpg';
 
   // Success and image loading
   return true;
@@ -919,16 +937,39 @@ function renderAllShapes() {
   var identityM = new Matrix4();
   gl.uniformMatrix4fv(u_GlobalRotateMatrix, false, identityM.elements);
 
-  drawMap(); // Draw the map
+  //drawMap(); // Draw the map
 
   // Ground
   var ground = new Cube();
   ground.color = [0.0, 0.4, 0.0, 1];
-  ground.textureNum = 1; // No texture
+  ground.textureNum = -2; // No texture
   ground.matrix.translate(-7.0, -1, -8);
   ground.matrix.rotate(0, 1, 0, 0);
   ground.matrix.scale(32.0, 0.01, 32.0);
   ground.render();
+
+  // random cube
+  var cube = new Cube();
+  cube.color = [0.8, 0, 0, 1];
+  cube.textureNum = -2; // No texture
+  cube.matrix.translate(-2.0, -0.2, -4);
+  cube.matrix.rotate(0, 1, 0, 0);
+  cube.matrix.scale(0.5, 0.5, 0.5);
+  cube.render();
+
+  // room
+  var room = new Cube();
+  room.color = [0.5, 0.5, 0.5, 1];
+  if (g_normalOn) {
+    room.textureNum = -3; // No texture
+  }
+  else {
+    room.textureNum = -2; // No texture
+  }
+  room.matrix.translate(1, 3, -.8);
+  room.matrix.rotate(0, 1, 0, 0);
+  room.matrix.scale(-5.5, -5.5, -5.5);
+  room.renderNormals();
 
   // Sky
   var sky = new Cube();

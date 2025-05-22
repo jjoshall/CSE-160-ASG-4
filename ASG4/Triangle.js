@@ -28,6 +28,7 @@ var vertexBuffer = null;
 var uvBuffer = null;
 var cubeVertexBuffer = null;
 var cubeUVBuffer = null;
+var normalBuffer = null;
 
 const CUBE_VERTICES = new Float32Array([
     // Front face
@@ -83,6 +84,12 @@ function initBuffers() {
     if (!uvBuffer) {
       console.log('Failed to create the buffer object for UV');
       return -1;
+    }
+
+    normalBuffer = gl.createBuffer();
+    if (!normalBuffer) {
+        console.log('Failed to create the buffer object for normals');
+        return -1;
     }
 
     // Make buffers for cubes
@@ -170,6 +177,51 @@ function drawTriangle3DUV(vertices, uv) {
 
     // Draw the triangle
     gl.drawArrays(gl.TRIANGLES, 0, n); // Draw the rectangle
+}
+
+function drawTriangle3DUVNormal(vertices, uv, normals) {
+    var n = vertices.length / 3; // The number of vertices
+
+    // Bind the buffer object to target
+    gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+
+    // Write date into the buffer object
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.DYNAMIC_DRAW);
+
+    // Assign the buffer object to a_Position variable
+    gl.vertexAttribPointer(a_Position, 3, gl.FLOAT, false, 0, 0);
+
+    // Enable the assignment to a_Position variable
+    gl.enableVertexAttribArray(a_Position);
+
+    // Bind the buffer object to target
+    gl.bindBuffer(gl.ARRAY_BUFFER, uvBuffer);
+
+    // Write date into the buffer object
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(uv), gl.DYNAMIC_DRAW);
+
+    // Assign the buffer object to a_UV variable
+    gl.vertexAttribPointer(a_UV, 2, gl.FLOAT, false, 0, 0);
+
+    // Enable the assignment to a_UV variable
+    gl.enableVertexAttribArray(a_UV);
+
+    // Bind the buffer object to target
+    gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
+
+    // Write date into the buffer object
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(normals), gl.DYNAMIC_DRAW);
+
+    // Assign the buffer object to a_Normal variable
+    gl.vertexAttribPointer(a_Normal, 3, gl.FLOAT, false, 0, 0);
+
+    // Enable the assignment to a_Normal variable
+    gl.enableVertexAttribArray(a_Normal);
+
+    // Draw the triangle
+    gl.drawArrays(gl.TRIANGLES, 0, n); // Draw the rectangle
+
+    g_vertexBuffer = null;
 }
 
 function drawCube() {
