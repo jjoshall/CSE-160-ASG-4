@@ -665,6 +665,9 @@ function updateKeyHandlers() {
 
 // Update the angles of everything if currently animating
 function updateAnimationAngles() {
+  g_lightPos[0] = g_baseLightPos[0] + Math.cos(g_seconds);
+  g_lightPos[2] = g_baseLightPos[2] + Math.sin(g_seconds);
+  
   if (g_wingsAnimation) {
     g_wingsAngle = Math.max(0, 45 * Math.sin(4 * g_seconds));
   }
@@ -975,7 +978,7 @@ function renderAllShapes() {
   gl.uniform3f(u_lightPos, g_lightPos[0], g_lightPos[1], g_lightPos[2]);
 
   var light = new Cube();
-  light.color = [2,2,0,1];
+  light.color = [2,2,2,1];
   light.matrix.translate(g_lightPos[0], g_lightPos[1], g_lightPos[2]);
   light.matrix.scale(0.1, 0.1, 0.1);
   light.render();
@@ -993,7 +996,7 @@ function renderAllShapes() {
 
   // random cube
   var cube = new Cube();
-  cube.color = [0.8, 0, 0, 1];
+  cube.color = [0, 0, 1, 1];
   cube.textureNum = -2; // No texture
   cube.matrix.translate(-1.0, -0.2, -4);
   cube.matrix.rotate(0, 1, 0, 0);
