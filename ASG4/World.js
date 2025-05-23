@@ -7,6 +7,7 @@ var VSHADER_SOURCE = `
   attribute vec3 a_Normal;
   varying vec2 v_UV;
   varying vec3 v_Normal;
+  varying vec4 v_vertPos;
   uniform mat4 u_ModelMatrix;
   uniform mat4 u_GlobalRotateMatrix;
   uniform mat4 u_ViewMatrix;
@@ -15,6 +16,7 @@ var VSHADER_SOURCE = `
     gl_Position = u_ProjectionMatrix * u_ViewMatrix * u_GlobalRotateMatrix * u_ModelMatrix * a_Position;
     v_UV = a_UV;
     v_Normal = a_Normal;
+    v_vertPos = u_ModelMatrix * a_Position;
   }`
 
 // Fragment shader program
@@ -22,6 +24,8 @@ var FSHADER_SOURCE =`
   precision mediump float;
   varying vec2 v_UV;
   varying vec3 v_Normal;
+  uniform vec3 u_lightPos;
+  varying vec4 v_vertPos;
   uniform vec4 u_FragColor;
   uniform sampler2D u_Sampler0;
   uniform sampler2D u_Sampler1;
@@ -60,6 +64,15 @@ var FSHADER_SOURCE =`
     }
     else {
       gl_FragColor = vec4(1, .2, .2, 1); // Error, put redish
+    }
+
+    vec3 lightVector = vec3(v_vertPos) - u_lightPos;
+    float r = length(lightVector);
+    if (r < 1.0) {
+      gl_FragColor = vec4(1, 0, 0, 1); // Put redish
+    }
+    else if (r < 2.0) {
+      gl_FragColor = vec4(0, 1, 0, 1); // Put greenish
     }
   }`
 
@@ -208,6 +221,13 @@ function connectVariablesToGLSL() {
     return false;
   }
 
+  // Get the storage location of u_lightPos
+  u_lightPos = gl.getUniformLocation(gl.program, 'u_lightPos');
+  if (!u_lightPos) {
+    console.log('Failed to get the storage location of u_lightPos');
+    return false;
+  }
+
   // Set initial value for this matrix to identify
   var identityM = new Matrix4();
   gl.uniformMatrix4fv(u_ModelMatrix, false, identityM.elements);
@@ -236,11 +256,26 @@ let g_camera;
 let g_activeKeys = new Set(); // Set to keep track of active keys
 let g_keyProcessed = new Set();
 let g_normalOn = false; // Flag to toggle normal mapping
+let g_baseLightPos = [-2, 1, -5]; // Base light position
+let g_lightPos = [...g_baseLightPos]; // Light position
 
 function addActionsForHtmlUI() {
   // Add event listeners for HTML UI elements
   document.getElementById('normalOn').onclick = function() {g_normalOn = true;};
   document.getElementById('normalOff').onclick = function() {g_normalOn = false;};
+
+  document.getElementById('lightSlideX').addEventListener('input', function(ev) {
+    g_lightPos[0] = g_baseLightPos[0] + parseFloat(this.value) / 10;
+    renderAllShapes();
+  });
+  document.getElementById('lightSlideY').addEventListener('input', function(ev) {
+    g_lightPos[1] = g_baseLightPos[1] + parseFloat(this.value) / 10;
+    renderAllShapes();
+  });
+  document.getElementById('lightSlideZ').addEventListener('input', function(ev) {
+    g_lightPos[2] = g_baseLightPos[2] + parseFloat(this.value) / 10;
+    renderAllShapes();
+  });
 }
 
 function initTexture0() {
@@ -937,6 +972,14 @@ function renderAllShapes() {
   var identityM = new Matrix4();
   gl.uniformMatrix4fv(u_GlobalRotateMatrix, false, identityM.elements);
 
+  gl.uniform3f(u_lightPos, g_lightPos[0], g_lightPos[1], g_lightPos[2]);
+
+  var light = new Cube();
+  light.color = [2,2,0,1];
+  light.matrix.translate(g_lightPos[0], g_lightPos[1], g_lightPos[2]);
+  light.matrix.scale(0.1, 0.1, 0.1);
+  light.render();
+
   //drawMap(); // Draw the map
 
   // Ground
@@ -952,7 +995,7 @@ function renderAllShapes() {
   var cube = new Cube();
   cube.color = [0.8, 0, 0, 1];
   cube.textureNum = -2; // No texture
-  cube.matrix.translate(-2.0, -0.2, -4);
+  cube.matrix.translate(-1.0, -0.2, -4);
   cube.matrix.rotate(0, 1, 0, 0);
   cube.matrix.scale(0.5, 0.5, 0.5);
   cube.render();
@@ -965,7 +1008,7 @@ function renderAllShapes() {
   else {
     sphere.textureNum = -2; // No texture
   }
-  sphere.matrix.translate(-2.0, 0.5, -3);
+  sphere.matrix.translate(-3.0, 0, -4);
   sphere.matrix.rotate(0, 1, 0, 0);
   sphere.matrix.scale(0.5, 0.5, 0.5);
   sphere.render();
@@ -996,7 +1039,7 @@ function renderAllShapes() {
   let chickenMatrix = new Matrix4();
   chickenMatrix.translate(-1, 5 + chickenOffset, 16); // Move along X-axis
 
-  drawChicken(chickenMatrix); // Draw the chicken
+  //drawChicken(chickenMatrix); // Draw the chicken
 
   var duration = performance.now() - startTime;
   sendTextToHTML("ms: " + Math.floor(duration) + " fps: " + Math.floor(1000/duration), "numdot");

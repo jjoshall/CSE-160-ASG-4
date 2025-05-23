@@ -16,13 +16,17 @@
           <p id="numdot"> XXX </p>
         </ul>
     
-    <canvas id="webgl" width="800" height="600">
+    <canvas id="webgl" width="600" height="400">
     Please use a browser that supports "canvas"
     </canvas>
     <br><br>
 
     <button type="button" id="normalOn">Normal On</button>
     <button type="button" id="normalOff">Normal Off</button>
+    <br><br>
+    Light X <input type="range" min="-25" max="25" value="0" class="slider" id="lightSlideX">
+    Light Y <input type="range" min="-25" max="25" value="0" class="slider" id="lightSlideY">
+    Light Z <input type="range" min="-25" max="25" value="0" class="slider" id="lightSlideZ">
 
     <script src="ASG4/lib/webgl-utils.js"></script>
     <script src="ASG4/lib/webgl-debug.js"></script>
