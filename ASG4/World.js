@@ -35,6 +35,8 @@ var FSHADER_SOURCE =`
   uniform sampler2D u_Sampler4;
   uniform sampler2D u_Sampler5;
   uniform int u_whichTexture;
+  uniform bool u_lightOn;
+
   void main() {
     if (u_whichTexture == -3) {
       gl_FragColor = vec4((v_Normal + 1.0) / 2.0, 1.0); // Use normal debug color
@@ -91,7 +93,14 @@ var FSHADER_SOURCE =`
 
     vec3 diffuse = vec3(gl_FragColor) * nDotL * 0.9;
     vec3 ambient = vec3(gl_FragColor) * 0.5;
-    gl_FragColor = vec4(specular + diffuse + ambient, 1.0);
+    if (u_lightOn) {
+      if (u_whichTexture == -3) {
+        gl_FragColor = vec4(specular + diffuse + ambient, 1.0);
+      }
+      else {
+        gl_FragColor = vec4(diffuse + ambient, 1.0);
+      }
+    }
   }`
 
 // Global Variables
@@ -114,6 +123,7 @@ let u_Sampler5;
 let u_whichTexture;
 let u_lightPos;
 let u_cameraPos;
+let u_lightOn;
 
 function setupWebGL() {
   // Retrieve <canvas> element
@@ -255,6 +265,13 @@ function connectVariablesToGLSL() {
     return false;
   }
 
+  // Get the storage location of u_lightOn
+  u_lightOn = gl.getUniformLocation(gl.program, 'u_lightOn');
+  if (!u_lightOn) {
+    console.log('Failed to get the storage location of u_lightOn');
+    return false;
+  }
+
   // Set initial value for this matrix to identify
   var identityM = new Matrix4();
   gl.uniformMatrix4fv(u_ModelMatrix, false, identityM.elements);
@@ -286,11 +303,16 @@ let g_normalOn = false; // Flag to toggle normal mapping
 let g_baseLightPos = [-2, 1, -5]; // Base light position
 let g_lightPos = [...g_baseLightPos]; // Light position
 let g_lightOffset = [0, 0, 0]; // Light offset
+let g_lightOn = true; // Flag to toggle light on/off
 
 function addActionsForHtmlUI() {
   // Add event listeners for HTML UI elements
   document.getElementById('normalOn').onclick = function() {g_normalOn = true;};
   document.getElementById('normalOff').onclick = function() {g_normalOn = false;};
+
+  document.getElementById('lightOn').addEventListener('change', function(ev) {
+    g_lightOn = ev.target.checked;
+  });
 
   document.getElementById('lightSlideX').addEventListener('input', function(ev) {
     g_lightPos[0] = g_baseLightPos[0] + parseFloat(this.value) / 10;
@@ -1011,6 +1033,7 @@ function renderAllShapes() {
 
   gl.uniform3f(u_lightPos, finalLightPos[0], finalLightPos[1], finalLightPos[2]);
   gl.uniform3f(u_cameraPos, g_camera.eye.elements[0], g_camera.eye.elements[1], g_camera.eye.elements[2]);
+  gl.uniform1i(u_lightOn, g_lightOn);
 
   var light = new Cube();
   light.color = [2,2,0,1];
