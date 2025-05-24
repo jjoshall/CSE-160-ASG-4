@@ -26,6 +26,7 @@ var FSHADER_SOURCE =`
   varying vec3 v_Normal;
   uniform vec3 u_lightPos;
   varying vec4 v_vertPos;
+  uniform vec3 u_cameraPos;
   uniform vec4 u_FragColor;
   uniform sampler2D u_Sampler0;
   uniform sampler2D u_Sampler1;
@@ -66,14 +67,31 @@ var FSHADER_SOURCE =`
       gl_FragColor = vec4(1, .2, .2, 1); // Error, put redish
     }
 
-    vec3 lightVector = vec3(v_vertPos) - u_lightPos;
+    vec3 lightVector = u_lightPos - vec3(v_vertPos);
     float r = length(lightVector);
-    if (r < 1.0) {
-      gl_FragColor = vec4(1, 0, 0, 1); // Put redish
-    }
-    else if (r < 2.0) {
-      gl_FragColor = vec4(0, 1, 0, 1); // Put greenish
-    }
+    // if (r < 1.0) {
+    //   gl_FragColor = vec4(1, 0, 0, 1); // Put redish
+    // }
+    // else if (r < 2.0) {
+    //   gl_FragColor = vec4(0, 1, 0, 1); // Put greenish
+    // }
+
+    // Light visualization
+    //gl_FragColor = vec4(vec3(gl_FragColor) / (r*r), 1.0); // Normalize color
+  
+    vec3 L = normalize(lightVector);
+    vec3 N = normalize(v_Normal);
+    float nDotL = max(dot(N, L), 0.0);
+
+    vec3 R = reflect(-L, N);
+
+    vec3 E = normalize(u_cameraPos - vec3(v_vertPos));
+
+    float specular = pow(max(dot(E,R), 0.0), 100.0);
+
+    vec3 diffuse = vec3(gl_FragColor) * nDotL * 0.9;
+    vec3 ambient = vec3(gl_FragColor) * 0.5;
+    gl_FragColor = vec4(specular + diffuse + ambient, 1.0);
   }`
 
 // Global Variables
@@ -94,6 +112,8 @@ let u_Sampler3;
 let u_Sampler4;
 let u_Sampler5;
 let u_whichTexture;
+let u_lightPos;
+let u_cameraPos;
 
 function setupWebGL() {
   // Retrieve <canvas> element
@@ -228,6 +248,13 @@ function connectVariablesToGLSL() {
     return false;
   }
 
+  // Get the storage location of u_cameraPos
+  u_cameraPos = gl.getUniformLocation(gl.program, 'u_cameraPos');
+  if (!u_cameraPos) {
+    console.log('Failed to get the storage location of u_cameraPos');
+    return false;
+  }
+
   // Set initial value for this matrix to identify
   var identityM = new Matrix4();
   gl.uniformMatrix4fv(u_ModelMatrix, false, identityM.elements);
@@ -258,6 +285,7 @@ let g_keyProcessed = new Set();
 let g_normalOn = false; // Flag to toggle normal mapping
 let g_baseLightPos = [-2, 1, -5]; // Base light position
 let g_lightPos = [...g_baseLightPos]; // Light position
+let g_lightOffset = [0, 0, 0]; // Light offset
 
 function addActionsForHtmlUI() {
   // Add event listeners for HTML UI elements
@@ -665,8 +693,8 @@ function updateKeyHandlers() {
 
 // Update the angles of everything if currently animating
 function updateAnimationAngles() {
-  g_lightPos[0] = g_baseLightPos[0] + Math.cos(g_seconds);
-  g_lightPos[2] = g_baseLightPos[2] + Math.sin(g_seconds);
+  g_lightOffset[0] = Math.cos(g_seconds);
+  g_lightOffset[2] = Math.sin(g_seconds);
   
   if (g_wingsAnimation) {
     g_wingsAngle = Math.max(0, 45 * Math.sin(4 * g_seconds));
@@ -975,11 +1003,18 @@ function renderAllShapes() {
   var identityM = new Matrix4();
   gl.uniformMatrix4fv(u_GlobalRotateMatrix, false, identityM.elements);
 
-  gl.uniform3f(u_lightPos, g_lightPos[0], g_lightPos[1], g_lightPos[2]);
+  let finalLightPos = [
+    g_lightPos[0] + g_lightOffset[0],
+    g_lightPos[1] + g_lightOffset[1],
+    g_lightPos[2] + g_lightOffset[2]
+  ];
+
+  gl.uniform3f(u_lightPos, finalLightPos[0], finalLightPos[1], finalLightPos[2]);
+  gl.uniform3f(u_cameraPos, g_camera.eye.elements[0], g_camera.eye.elements[1], g_camera.eye.elements[2]);
 
   var light = new Cube();
-  light.color = [2,2,2,1];
-  light.matrix.translate(g_lightPos[0], g_lightPos[1], g_lightPos[2]);
+  light.color = [2,2,0,1];
+  light.matrix.translate(finalLightPos[0], finalLightPos[1], finalLightPos[2]);
   light.matrix.scale(0.1, 0.1, 0.1);
   light.render();
 
