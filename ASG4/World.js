@@ -25,6 +25,10 @@ var FSHADER_SOURCE =`
   varying vec2 v_UV;
   varying vec3 v_Normal;
   uniform vec3 u_lightPos;
+  uniform vec3 u_spotlightPos;
+  uniform vec3 u_spotlightDir;
+  uniform float u_spotlightCutoff;
+  uniform float u_spotlightOuterCutoff;
   varying vec4 v_vertPos;
   uniform vec3 u_cameraPos;
   uniform vec4 u_FragColor;
@@ -36,6 +40,7 @@ var FSHADER_SOURCE =`
   uniform sampler2D u_Sampler5;
   uniform int u_whichTexture;
   uniform bool u_lightOn;
+  uniform bool u_spotlightOn;
 
   void main() {
     if (u_whichTexture == -3) {
@@ -69,37 +74,70 @@ var FSHADER_SOURCE =`
       gl_FragColor = vec4(1, .2, .2, 1); // Error, put redish
     }
 
-    vec3 lightVector = u_lightPos - vec3(v_vertPos);
-    float r = length(lightVector);
-    // if (r < 1.0) {
-    //   gl_FragColor = vec4(1, 0, 0, 1); // Put redish
-    // }
-    // else if (r < 2.0) {
-    //   gl_FragColor = vec4(0, 1, 0, 1); // Put greenish
-    // }
-
-    // Light visualization
-    //gl_FragColor = vec4(vec3(gl_FragColor) / (r*r), 1.0); // Normalize color
-  
-    vec3 L = normalize(lightVector);
-    vec3 N = normalize(v_Normal);
-    float nDotL = max(dot(N, L), 0.0);
-
-    vec3 R = reflect(-L, N);
-
-    vec3 E = normalize(u_cameraPos - vec3(v_vertPos));
-
-    float specular = pow(max(dot(E,R), 0.0), 100.0);
-
-    vec3 diffuse = vec3(gl_FragColor) * nDotL * 0.9;
-    vec3 ambient = vec3(gl_FragColor) * 0.5;
+    vec3 finalColor = vec3(0.0);
+    vec3 ambient = vec3(gl_FragColor) * 0.3;
+    
     if (u_lightOn) {
-      if (u_whichTexture == -3) {
-        gl_FragColor = vec4(specular + diffuse + ambient, 1.0);
+      // Point light calculation
+      vec3 lightVector = u_lightPos - vec3(v_vertPos);
+      float r = length(lightVector);
+      
+      vec3 L = normalize(lightVector);
+      vec3 N = normalize(v_Normal);
+      float nDotL = max(dot(N, L), 0.0);
+      
+      // Attenuation for point light
+      float attenuation = 1.0 / (1.0 + 0.09 * r + 0.032 * r * r);
+      
+      vec3 R = reflect(-L, N);
+      vec3 E = normalize(u_cameraPos - vec3(v_vertPos));
+      float specular = pow(max(dot(E, R), 0.0), 32.0);
+      
+      vec3 pointDiffuse = vec3(gl_FragColor) * nDotL * attenuation * 0.8;
+      vec3 pointSpecular = vec3(1.0) * specular * attenuation * 0.5;
+      
+      finalColor += pointDiffuse + pointSpecular;
+    }
+    
+    if (u_spotlightOn) {
+      // Spotlight calculation
+      vec3 spotlightVector = u_spotlightPos - vec3(v_vertPos);
+      float spotDistance = length(spotlightVector);
+      
+      vec3 spotL = normalize(spotlightVector);
+      vec3 spotN = normalize(v_Normal);
+      float spotNDotL = max(dot(spotN, spotL), 0.0);
+      
+      // Check if fragment is within spotlight cone
+      vec3 spotDir = normalize(u_spotlightDir);
+      float theta = dot(spotL, -spotDir);
+      
+      if (theta > u_spotlightOuterCutoff) {
+        // Smooth falloff between inner and outer cone
+        float epsilon = u_spotlightCutoff - u_spotlightOuterCutoff;
+        float intensity = clamp((theta - u_spotlightOuterCutoff) / epsilon, 0.0, 1.0);
+        
+        // Distance attenuation for spotlight
+        float spotAttenuation = 1.0 / (1.0 + 0.09 * spotDistance + 0.032 * spotDistance * spotDistance);
+        
+        vec3 spotR = reflect(-spotL, spotN);
+        vec3 spotE = normalize(u_cameraPos - vec3(v_vertPos));
+        float spotSpecular = pow(max(dot(spotE, spotR), 0.0), 64.0);
+        
+        vec3 spotDiffuse = vec3(gl_FragColor) * spotNDotL * intensity * spotAttenuation * 1.2;
+        vec3 spotSpecularColor = vec3(1.0, 1.0, 0.8) * spotSpecular * intensity * spotAttenuation * 0.8;
+        
+        finalColor += spotDiffuse + spotSpecularColor;
       }
-      else {
-        gl_FragColor = vec4(diffuse + ambient, 1.0);
-      }
+    }
+    
+    finalColor += ambient;
+    
+    if (u_whichTexture == -3) {
+      // Show normals or specular highlights
+      gl_FragColor = vec4(finalColor, 1.0);
+    } else {
+      gl_FragColor = vec4(finalColor, 1.0);
     }
   }`
 
@@ -124,6 +162,11 @@ let u_whichTexture;
 let u_lightPos;
 let u_cameraPos;
 let u_lightOn;
+let u_spotlightPos;
+let u_spotlightDir;
+let u_spotlightCutoff;
+let u_spotlightOuterCutoff;
+let u_spotlightOn;
 
 function setupWebGL() {
   // Retrieve <canvas> element
@@ -272,6 +315,41 @@ function connectVariablesToGLSL() {
     return false;
   }
 
+  // Get the storage location of u_spotlightPos
+  u_spotlightPos = gl.getUniformLocation(gl.program, 'u_spotlightPos');
+  if (!u_spotlightPos) {
+    console.log('Failed to get the storage location of u_spotlightPos');
+    return false;
+  }
+
+  // Get the storage location of u_spotlightDir
+  u_spotlightDir = gl.getUniformLocation(gl.program, 'u_spotlightDir');
+  if (!u_spotlightDir) {
+    console.log('Failed to get the storage location of u_spotlightDir');
+    return false;
+  }
+
+  // Get the storage location of u_spotlightCutoff
+  u_spotlightCutoff = gl.getUniformLocation(gl.program, 'u_spotlightCutoff');
+  if (!u_spotlightCutoff) {
+    console.log('Failed to get the storage location of u_spotlightCutoff');
+    return false;
+  }
+
+  // Get the storage location of u_spotlightOuterCutoff
+  u_spotlightOuterCutoff = gl.getUniformLocation(gl.program, 'u_spotlightOuterCutoff');
+  if (!u_spotlightOuterCutoff) {
+    console.log('Failed to get the storage location of u_spotlightOuterCutoff');
+    return false;
+  }
+
+  // Get the storage location of u_spotlightOn
+  u_spotlightOn = gl.getUniformLocation(gl.program, 'u_spotlightOn');
+  if (!u_spotlightOn) {
+    console.log('Failed to get the storage location of u_spotlightOn');
+    return false;
+  }
+
   // Set initial value for this matrix to identify
   var identityM = new Matrix4();
   gl.uniformMatrix4fv(u_ModelMatrix, false, identityM.elements);
@@ -300,10 +378,13 @@ let g_camera;
 let g_activeKeys = new Set(); // Set to keep track of active keys
 let g_keyProcessed = new Set();
 let g_normalOn = false; // Flag to toggle normal mapping
-let g_baseLightPos = [-2, 1, -5]; // Base light position
+let g_baseLightPos = [-2, 0, -5]; // Base light position
 let g_lightPos = [...g_baseLightPos]; // Light position
 let g_lightOffset = [0, 0, 0]; // Light offset
 let g_lightOn = true; // Flag to toggle light on/off
+let g_spotlightOn = true; // Flag to toggle spotlight on/off
+let g_baseSpotlightPos = [0, 4, -2]; // Base position for spotlight
+let g_spotlightPos = [0, 4, -2]; // Current spotlight position (will be modified by sliders)
 
 function addActionsForHtmlUI() {
   // Add event listeners for HTML UI elements
@@ -312,6 +393,10 @@ function addActionsForHtmlUI() {
 
   document.getElementById('lightOn').addEventListener('change', function(ev) {
     g_lightOn = ev.target.checked;
+  });
+
+  document.getElementById('spotOn').addEventListener('change', function(ev) {
+    g_spotlightOn = ev.target.checked;
   });
 
   document.getElementById('lightSlideX').addEventListener('input', function(ev) {
@@ -324,6 +409,21 @@ function addActionsForHtmlUI() {
   });
   document.getElementById('lightSlideZ').addEventListener('input', function(ev) {
     g_lightPos[2] = g_baseLightPos[2] + parseFloat(this.value) / 10;
+    renderAllShapes();
+  });
+
+  document.getElementById('spotSlideX').addEventListener('input', function(ev) {
+    g_spotlightPos[0] = g_baseSpotlightPos[0] + parseFloat(this.value) / 10;
+    renderAllShapes();
+  });
+
+  document.getElementById('spotSlideY').addEventListener('input', function(ev) {
+    g_spotlightPos[1] = g_baseSpotlightPos[1] + parseFloat(this.value) / 10;
+    renderAllShapes();
+  });
+
+  document.getElementById('spotSlideZ').addEventListener('input', function(ev) {
+    g_spotlightPos[2] = g_baseSpotlightPos[2] + parseFloat(this.value) / 10;
     renderAllShapes();
   });
 }
@@ -1031,15 +1131,34 @@ function renderAllShapes() {
     g_lightPos[2] + g_lightOffset[2]
   ];
 
+  let spotlightPos = [-2, 4, -4]; // Position the spotlight above and forward
+  let spotlightDir = [0, -1, 0.2]; // Point downward and slightly forward
+  let innerCutoffAngle = 12.0; // Inner cone angle in degrees
+  let outerCutoffAngle = 17.0; // Outer cone angle in degrees
+
+  gl.uniform3f(u_spotlightPos, g_spotlightPos[0], g_spotlightPos[1], g_spotlightPos[2]);
+  gl.uniform3f(u_spotlightDir, spotlightDir[0], spotlightDir[1], spotlightDir[2]);
+  gl.uniform1f(u_spotlightCutoff, Math.cos(innerCutoffAngle * Math.PI / 180));
+  gl.uniform1f(u_spotlightOuterCutoff, Math.cos(outerCutoffAngle * Math.PI / 180));
+
   gl.uniform3f(u_lightPos, finalLightPos[0], finalLightPos[1], finalLightPos[2]);
   gl.uniform3f(u_cameraPos, g_camera.eye.elements[0], g_camera.eye.elements[1], g_camera.eye.elements[2]);
   gl.uniform1i(u_lightOn, g_lightOn);
+  gl.uniform1i(u_spotlightOn, g_spotlightOn);
 
   var light = new Cube();
   light.color = [2,2,0,1];
   light.matrix.translate(finalLightPos[0], finalLightPos[1], finalLightPos[2]);
   light.matrix.scale(0.1, 0.1, 0.1);
   light.render();
+
+  if (g_spotlightOn) {
+    var spotlightIndicator = new Cube();
+    spotlightIndicator.color = [1, 1, 1, 1];
+    spotlightIndicator.matrix.translate(g_spotlightPos[0], g_spotlightPos[1], g_spotlightPos[2]);
+    spotlightIndicator.matrix.scale(2, 2, 2);
+    spotlightIndicator.render();
+  }
 
   //drawMap(); // Draw the map
 
@@ -1051,15 +1170,6 @@ function renderAllShapes() {
   ground.matrix.rotate(0, 1, 0, 0);
   ground.matrix.scale(32.0, 0.01, 32.0);
   ground.render();
-
-  // random cube
-  var cube = new Cube();
-  cube.color = [0, 0, 1, 1];
-  cube.textureNum = -2; // No texture
-  cube.matrix.translate(-1.0, -0.2, -4);
-  cube.matrix.rotate(0, 1, 0, 0);
-  cube.matrix.scale(0.5, 0.5, 0.5);
-  cube.render();
 
   var sphere = new Sphere();
   sphere.color = [0.8, 0, 0, 1];
@@ -1096,11 +1206,11 @@ function renderAllShapes() {
   sky.matrix.translate(-.4, -0.5, -0.5);
   sky.render();
 
-  let chickenOffset = Math.sin(g_seconds * 1.5) * 2.0;
+  //let chickenOffset = Math.sin(g_seconds * 1.5) * 2.0;
   let chickenMatrix = new Matrix4();
-  chickenMatrix.translate(-1, 5 + chickenOffset, 16); // Move along X-axis
+  chickenMatrix.translate(-12, 0, -3); // Move along X-axis
 
-  //drawChicken(chickenMatrix); // Draw the chicken
+  drawChicken(chickenMatrix); // Draw the chicken
 
   var duration = performance.now() - startTime;
   sendTextToHTML("ms: " + Math.floor(duration) + " fps: " + Math.floor(1000/duration), "numdot");
@@ -1224,135 +1334,212 @@ function drawChicken(moveMatrix) {
   // Left thigh
   var leftThigh = new Cube();
   leftThigh.color = [0.9, 0.7, 0, 1.0];
+  if (g_normalOn) {
+    leftThigh.textureNum = -3; // No texture
+  }
+  else {
+    leftThigh.textureNum = -2; // No texture
+  }
   leftThigh.matrix = new Matrix4(moveMatrix);
   leftThigh.matrix.translate(9.9, -.35, 0.0); // Translated by 10 units to the right
   leftThigh.matrix.rotate(180, 0, 0, 1);
   leftThigh.matrix.rotate(g_leftThighAngle, 1, 0, 0);
   var leftThighCoordinatesMat = new Matrix4(leftThigh.matrix);
   leftThigh.matrix.scale(0.1, 0.175, 0.05);
-  leftThigh.render();
+  leftThigh.renderNormals();
 
   // Left calf
   var leftCalf = new Cube();
   leftCalf.color = [0.9, 0.7, 0, 1.0];
+  if (g_normalOn) {
+    leftCalf.textureNum = -3; // No texture
+  }
+  else {
+    leftCalf.textureNum = -2; // No texture
+  }
   leftCalf.matrix = new Matrix4(moveMatrix);
   leftCalf.matrix = leftThighCoordinatesMat;
   leftCalf.matrix.translate(0.0, .175, 0.0);
   leftCalf.matrix.rotate(g_leftCalfAngle, 1, 0, 0);
   var leftCalfCoordinatesMat = new Matrix4(leftCalf.matrix);
   leftCalf.matrix.scale(0.1, 0.175, 0.05);
-  leftCalf.render();
+  leftCalf.renderNormals();
 
   // Left Foot
   var leftFoot = new Cube();
   leftFoot.color = [0.9, 0.7, 0, 1.0];
+  if (g_normalOn) {
+    leftFoot.textureNum = -3; // No texture
+  }
+  else {
+    leftFoot.textureNum = -2; // No texture
+  }
   leftFoot.matrix = new Matrix4(moveMatrix);
   leftFoot.matrix = leftCalfCoordinatesMat;
   leftFoot.matrix.translate(.15, .155, .1);
   leftFoot.matrix.rotate(180, 0, 1, 0);
   leftFoot.matrix.rotate(g_leftFootAngle, 1, 0, 0);
   leftFoot.matrix.scale(.2, .02, .3);
-  leftFoot.render();
+  leftFoot.renderNormals();
 
   // Right thigh
   var rightThigh = new Cube();
   rightThigh.color = [0.9, 0.7, 0, 1.0];
+  if (g_normalOn) {
+    rightThigh.textureNum = -3; // No texture
+  }
+  else {
+    rightThigh.textureNum = -2; // No texture
+  }
   rightThigh.matrix = new Matrix4(moveMatrix);
   rightThigh.matrix.translate(10.2, -.35, 0.0); // Translated by 10 units to the right
   rightThigh.matrix.rotate(180, 0, 0, 1);
   rightThigh.matrix.rotate(g_rightThighAngle, 1, 0, 0);
   var rightThighCoordinatesMat = new Matrix4(rightThigh.matrix);
   rightThigh.matrix.scale(0.1, 0.175, 0.05);
-  rightThigh.render();
+  rightThigh.renderNormals();
 
   // Right calf
   var rightCalf = new Cube();
   rightCalf.color = [0.9, 0.7, 0, 1.0];
+  if (g_normalOn) {
+    rightCalf.textureNum = -3; // No texture
+  }
+  else {
+    rightCalf.textureNum = -2; // No texture
+  }
   rightCalf.matrix = new Matrix4(moveMatrix);
   rightCalf.matrix = rightThighCoordinatesMat;
   rightCalf.matrix.translate(0.0, .175, 0.0);
   rightCalf.matrix.rotate(g_rightCalfAngle, 1, 0, 0);
   var rightCalfCoordinatesMat = new Matrix4(rightCalf.matrix);
   rightCalf.matrix.scale(0.1, 0.175, 0.05);
-  rightCalf.render();
+  rightCalf.renderNormals();
 
   // Right Foot
   var rightFoot = new Cube();
   rightFoot.color = [0.9, 0.7, 0, 1.0];
+  if (g_normalOn) {
+    rightFoot.textureNum = -3; // No texture
+  }
+  else {
+    rightFoot.textureNum = -2; // No texture
+  }
   rightFoot.matrix = new Matrix4(moveMatrix);
   rightFoot.matrix = rightCalfCoordinatesMat;
   rightFoot.matrix.translate(.15, .155, .1);
   rightFoot.matrix.rotate(180, 0, 1, 0);
   rightFoot.matrix.rotate(g_rightFootAngle, 1, 0, 0);
   rightFoot.matrix.scale(.2, .02, .3);
-  rightFoot.render();
+  rightFoot.renderNormals();
 
   // Gray body
   var body = new Cube();
-  body.color = [0.8, 0.8, 0.8, 1.0];
+  body.color = [0.8, 0.8, 0.7, 1.0];
+  if (g_normalOn) {
+    body.textureNum = -3; // No texture
+  }
+  else {
+    body.textureNum = -2; // No texture
+  }
   body.matrix = new Matrix4(moveMatrix);
-  body.textureNum = -2; // No texture
   body.matrix.translate(9.75, -.4, -0.4); // Translated by 10 units to the right
   body.matrix.rotate(0, 1, 0, 0);
   body.matrix.scale(0.5, 0.5, 0.7);
-  body.render();
+  body.renderNormals();
 
   // Right wing
   var rightWing = new Cube();
   rightWing.color = [0.6, 0.6, 0.6, 1.0];
+  if (g_normalOn) {
+    rightWing.textureNum = -3; // No texture
+  }
+  else {
+    rightWing.textureNum = -2; // No texture
+  }
   rightWing.matrix = new Matrix4(moveMatrix);
   rightWing.matrix.translate(10.25, 0.1, 0.25); // Translated by 10 units to the right
   rightWing.matrix.rotate(180, 1, 0, 0);
   rightWing.matrix.rotate(-g_wingsAngle, 0, 0, 1);
   rightWing.matrix.scale(0.07, 0.33, 0.5);
-  rightWing.render();
+  rightWing.renderNormals();
 
   // Left wing
   var leftWing = new Cube();
   leftWing.color = [0.6, 0.6, 0.6, 1.0];
+  if (g_normalOn) {
+    leftWing.textureNum = -3; // No texture
+  }
+  else {
+    leftWing.textureNum = -2; // No texture
+  }
   leftWing.matrix = new Matrix4(moveMatrix);
   leftWing.matrix.translate(9.75, .1, -0.25); // Translated by 10 units to the right
   leftWing.matrix.rotate(180, 0, 0, 1);
   leftWing.matrix.rotate(-g_wingsAngle, 0, 0, 1);
   leftWing.matrix.scale(0.07, 0.33, 0.5);
-  leftWing.render();
+  leftWing.renderNormals();
 
   // Head
   var head = new Cube();
   head.color = [0.9, 0.9, 0.9, 1.0];
+  if (g_normalOn) {
+    head.textureNum = -3; // No texture
+  }
+  else {
+    head.textureNum = -2; // No texture
+  }
   head.matrix = new Matrix4(moveMatrix);
   head.matrix.translate(9.85, 0.03, -0.6); // Translated by 10 units to the right
   head.matrix.rotate(0, 1, 0, 0);
   head.matrix.scale(0.3001, 0.43, 0.27);
-  head.render();
+  head.renderNormals();
 
   // Beak upper
   var beakUpper = new Cube();
   beakUpper.color = [1.0, 0.6, 0.0, 1.0];
+  if (g_normalOn) {
+    beakUpper.textureNum = -3; // No texture
+  }
+  else {
+    beakUpper.textureNum = -2; // No texture
+  }
   beakUpper.matrix = new Matrix4(moveMatrix);
   beakUpper.matrix.translate(9.852, 0.23, -0.75); // Translated by 10 units to the right
   beakUpper.matrix.rotate(0, 1, 0, 0);
   beakUpper.matrix.scale(0.295, 0.05, 0.3);
-  beakUpper.render();
+  beakUpper.renderNormals();
 
   // Beak lower
   var beakLower = new Cube();
   beakLower.color = [0.8, 0.5, 0.0, 1.0];
+  if (g_normalOn) {
+    beakLower.textureNum = -3; // No texture
+  }
+  else {
+    beakLower.textureNum = -2; // No texture
+  }
   beakLower.matrix = new Matrix4(moveMatrix);
   beakLower.matrix.translate(9.852, 0.23, -0.45); // Translated by 10 units to the right
   beakLower.matrix.rotate(180, 1, 0, 0);
   beakLower.matrix.rotate(g_lowerBeakAngle, 1, 0, 0);
   beakLower.matrix.scale(0.295, 0.05, 0.3);
-  beakLower.render();
+  beakLower.renderNormals();
 
   // Gizzard
   var gizzard = new Cube();
   gizzard.color = [1.0, 0, 0.0, 1.0];
+  if (g_normalOn) {
+    gizzard.textureNum = -3; // No texture
+  }
+  else {
+    gizzard.textureNum = -2; // No texture
+  }
   gizzard.matrix = new Matrix4(moveMatrix);
   gizzard.matrix.translate(9.93, 0.04, -0.7); // Translated by 10 units to the right
   gizzard.matrix.rotate(0, 1, 0, 0);
   gizzard.matrix.scale(0.13, 0.15, 0.1);
-  gizzard.render();
+  gizzard.renderNormals();
 
   // Left eye
   var leftEye = new Cube();
